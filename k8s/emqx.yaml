@@ -1,0 +1,131 @@
+---
+# EMQX PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: emqx-pvc
+  namespace: baby-monitor
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+
+---
+# EMQX Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emqx
+  namespace: baby-monitor
+  labels:
+    app: emqx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: emqx
+  template:
+    metadata:
+      labels:
+        app: emqx
+    spec:
+      containers:
+      - name: emqx
+        image: emqx/emqx:5.4.0
+        ports:
+        - containerPort: 1883
+          name: mqtt
+        - containerPort: 8083
+          name: websocket
+        - containerPort: 8883
+          name: mqtts
+        - containerPort: 8084
+          name: websockets
+        - containerPort: 18083
+          name: dashboard
+        env:
+        - name: EMQX_NAME
+          value: emqx
+        - name: EMQX_HOST
+          value: emqx
+        - name: EMQX_DASHBOARD__DEFAULT_USERNAME
+          value: admin
+        - name: EMQX_DASHBOARD__DEFAULT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: emqx-secret
+              key: dashboard-password
+        volumeMounts:
+        - name: emqx-data
+          mountPath: /opt/emqx/data
+        - name: emqx-log
+          mountPath: /opt/emqx/log
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 18083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 18083
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: emqx-data
+        persistentVolumeClaim:
+          claimName: emqx-pvc
+      - name: emqx-log
+        emptyDir: {}
+
+---
+# EMQX Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: emqx
+  namespace: baby-monitor
+  labels:
+    app: emqx
+spec:
+  type: ClusterIP
+  ports:
+  - port: 1883
+    targetPort: 1883
+    name: mqtt
+  - port: 8083
+    targetPort: 8083
+    name: websocket
+  - port: 8883
+    targetPort: 8883
+    name: mqtts
+  - port: 8084
+    targetPort: 8084
+    name: websockets
+  - port: 18083
+    targetPort: 18083
+    name: dashboard
+  selector:
+    app: emqx
+
+---
+# EMQX Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: emqx-secret
+  namespace: baby-monitor
+type: Opaque
+data:
+  dashboard-password: YWRtaW5fcGFzc3dvcmQ=

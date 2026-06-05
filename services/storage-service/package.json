@@ -1,0 +1,41 @@
+{
+  "name": "@baby-monitor/storage-service",
+  "version": "1.0.0",
+  "description": "Storage Service for Smart Home IoT Platform",
+  "main": "dist/configuration.js",
+  "scripts": {
+    "dev": "midway-bin dev --port=6005",
+    "build": "midway-bin build",
+    "test": "midway-bin test --ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@midwayjs/bootstrap": "^3.0.0",
+    "@midwayjs/core": "^3.0.0",
+    "@midwayjs/koa": "^3.0.0",
+    "@midwayjs/logger": "^3.0.0",
+    "@midwayjs/swagger": "^3.0.0",
+    "@midwayjs/redis": "^3.0.0",
+    "@midwayjs/validate": "^3.0.0",
+    "@midwayjs/typeorm": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "cos-nodejs-sdk-v5": "^2.12.0",
+    "minio": "^7.1.0",
+    "mysql2": "^3.6.0",
+    "typeorm": "^0.3.28",
+    "uuid": "^9.0.0",
+    "mime-types": "^2.1.35",
+    "archiver": "^6.0.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "@types/mime-types": "^2.1.4",
+    "@types/archiver": "^6.0.2",
+    "typescript": "^5.0.0"
+  }
+}

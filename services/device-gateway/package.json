@@ -1,0 +1,53 @@
+{
+  "name": "device-gateway",
+  "version": "2.0.0",
+  "description": "Baby Monitor Platform - Device Gateway Service (Unified MQTT Gateway + Protocol Adapter)",
+  "main": "dist/configuration.js",
+  "scripts": {
+    "start": "NODE_ENV=production node dist/index.js",
+    "dev": "node dev.js",
+    "dev:old": "midway-bin dev --port=6010",
+    "build": "midway-bin build",
+    "test": "midway-bin test --ts",
+    "test:simulator": "ts-node test/device-simulator.ts",
+    "test:simulator:100": "DEVICE_COUNT=100 ts-node test/device-simulator.ts",
+    "test:simulator:500": "DEVICE_COUNT=500 ts-node test/device-simulator.ts",
+    "lint": "eslint --ext .ts src/",
+    "lint:fix": "eslint --ext .ts src/ --fix"
+  },
+  "keywords": [
+    "midway",
+    "iot",
+    "mqtt",
+    "matter",
+    "gateway"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@baby-monitor/shared-types": "file:../../common/shared-types",
+    "@baby-monitor/shared-utils": "file:../../common/shared-utils",
+    "@midwayjs/bootstrap": "^3.0.0",
+    "@midwayjs/core": "^3.0.0",
+    "@midwayjs/koa": "^3.0.0",
+    "@midwayjs/logger": "^3.0.0",
+    "@midwayjs/redis": "^3.0.0",
+    "@midwayjs/socketio": "^3.0.0",
+    "@midwayjs/swagger": "^3.0.0",
+    "@midwayjs/typeorm": "^3.0.0",
+    "@project-chip/matter-node.js": "^0.9.1",
+    "@project-chip/matter.js": "^0.9.1",
+    "axios": "^1.6.0",
+    "dotenv": "^17.3.1",
+    "mqtt": "^5.3.0",
+    "mysql2": "^3.6.0"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/mqtt": "^2.5.0",
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,498 @@
+version: '3.8'
+
+services:
+  # ==================== 基础设施 ====================
+
+  # MySQL 数据库
+  mysql:
+    image: docker.m.daocloud.io/library/mysql:8.0
+    container_name: baby-monitor-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/user-service.sql:/docker-entrypoint-initdb.d/02-user-service.sql
+      - ./database/baby-service.sql:/docker-entrypoint-initdb.d/03-baby-service.sql
+      - ./database/device-service-extended.sql:/docker-entrypoint-initdb.d/04-device-service-extended.sql
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存和消息队列
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: baby-monitor-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # EMQX MQTT Broker
+  emqx:
+    image: docker.m.daocloud.io/emqx/emqx:5.4.0
+    container_name: baby-monitor-emqx
+    restart: unless-stopped
+    environment:
+      - EMQX_NAME=emqx
+      - EMQX_HOST=emqx
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USERNAME}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+      # MQTT/SSL Listener 配置 — 挂载证书后自动启用
+      - EMQX_LISTENERS__SSL__DEFAULT__ENABLE=${EMQX_SSL_ENABLED:-false}
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/etc/certs/emqx.key
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/etc/certs/emqx.crt
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE=/opt/emqx/etc/certs/ca.crt
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY=${EMQX_SSL_VERIFY:-verify_none}
+    ports:
+      - "1883:1883"     # MQTT
+      - "8083:8083"     # WebSocket
+      - "8883:8883"     # MQTT/SSL
+      - "8084:8084"     # WebSocket/SSL
+      - "18083:18083"   # Dashboard
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+      - ./certs/emqx:/opt/emqx/etc/certs:ro
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "emqx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储
+  minio:
+    image: docker.m.daocloud.io/minio/minio:latest
+    container_name: baby-monitor-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"     # API
+      - "9001:9001"     # Console
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== 微服务 ====================
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: baby-monitor-api-gateway
+    restart: unless-stopped
+    ports:
+      - "6001:6001"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - USER_SERVICE_URL=http://user-service:6002
+      - DEVICE_SERVICE_URL=http://device-service:6003
+      - BABY_SERVICE_URL=http://baby-service:6008
+      - VIDEO_SERVICE_URL=http://video-service:6004
+      - STORAGE_SERVICE_URL=http://storage-service:6005
+      - DEVICE_GATEWAY_URL=http://device-gateway:6010
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      baby-service:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # User Service
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-user-service
+    restart: unless-stopped
+    ports:
+      - "6002:6002"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - SMS_ACCESS_KEY=${SMS_ACCESS_KEY}
+      - SMS_SECRET_KEY=${SMS_SECRET_KEY}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Device Gateway (统一设备网关 - 整合了 MQTT Gateway 和 Protocol Adapter)
+  # mqtt-gateway 和 protocol-adapter 已合并到此服务，不再单独部署
+  device-gateway:
+    build:
+      context: ./services/device-gateway
+      dockerfile: Dockerfile
+    container_name: baby-monitor-device-gateway
+    restart: unless-stopped
+    ports:
+      - "6010:6010"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - DEVICE_SECRET=${DEVICE_SECRET}
+      - SERVICE_API_KEY=${SERVICE_API_KEY}
+      - SERVICE_TIMEOUT=${SERVICE_TIMEOUT}
+      - SERVICE_MAX_RETRIES=${SERVICE_MAX_RETRIES}
+      - SERVICE_RETRY_DELAY=${SERVICE_RETRY_DELAY}
+      - SESSION_KEYS=${SESSION_KEYS}
+    depends_on:
+      emqx:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Gateway (DEPRECATED - 已合并到 Device Gateway，不再维护)
+  # 此服务已被废弃，如需调试请取消注释，但不建议在生产环境使用
+  # mqtt-gateway:
+  #   build:
+  #     context: ./services/mqtt-gateway
+  #     dockerfile: Dockerfile
+  #   container_name: baby-monitor-mqtt-gateway
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6006:6006"
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV}
+  #     - MQTT_HOST=${MQTT_HOST}
+  #     - MQTT_PORT=${MQTT_PORT}
+  #     - REDIS_HOST=${REDIS_HOST}
+  #     - REDIS_PORT=${REDIS_PORT}
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - DEVICE_SECRET=${DEVICE_SECRET}
+  #   depends_on:
+  #     emqx:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - baby-monitor-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:6006/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Device Service
+  device-service:
+    build:
+      context: ./services/device-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-device-service
+    restart: unless-stopped
+    ports:
+      - "6003:6003"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}
+      - AWS_KVS_ROLE_ARN=${AWS_KVS_ROLE_ARN}
+      - AWS_S3_ROLE_ARN=${AWS_S3_ROLE_ARN}
+      - AWS_S3_RECORD_BUCKET=${AWS_S3_RECORD_BUCKET}
+      - AWS_S3_RECORD_FOLDER=${AWS_S3_RECORD_FOLDER}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Baby Service
+  baby-service:
+    build:
+      context: ./services/baby-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-baby-service
+    restart: unless-stopped
+    ports:
+      - "6008:6008"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6008/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Video Service
+  video-service:
+    build:
+      context: ./services/video-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-video-service
+    restart: unless-stopped
+    ports:
+      - "6004:6004"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - STORAGE_TYPE=${STORAGE_TYPE}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${STREAM_MINIO_BUCKET}
+      - AWS_KVS_STREAM_ARN=${AWS_KVS_STREAM_ARN}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - TENCENT_CLOUD_SECRET_ID=${TENCENT_CLOUD_SECRET_ID}
+      - TENCENT_CLOUD_SECRET_KEY=${TENCENT_CLOUD_SECRET_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6004/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Storage Service
+  storage-service:
+    build:
+      context: ./services/storage-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-storage-service
+    restart: unless-stopped
+    ports:
+      - "6005:6005"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - STORAGE_TYPE=${STORAGE_TYPE}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - TENCENT_COS_BUCKET=${TENCENT_COS_BUCKET}
+      - TENCENT_COS_REGION=${TENCENT_COS_REGION}
+      - TENCENT_COS_SECRET_ID=${TENCENT_COS_SECRET_ID}
+      - TENCENT_COS_SECRET_KEY=${TENCENT_COS_SECRET_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6005/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Protocol Adapter (DEPRECATED - 已合并到 Device Gateway，不再维护)
+  # 此服务已被废弃，如需调试请取消注释，但不建议在生产环境使用
+  # protocol-adapter:
+  #   build:
+  #     context: ./services/protocol-adapter
+  #     dockerfile: Dockerfile
+  #   container_name: baby-monitor-protocol-adapter
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6007:6007"
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV}
+  #     - MQTT_HOST=${MQTT_HOST}
+  #     - MQTT_PORT=${MQTT_PORT}
+  #     - REDIS_HOST=${REDIS_HOST}
+  #     - REDIS_PORT=${REDIS_PORT}
+  #     - REDIS_PASSWORD=${REDIS_PASSWORD}
+  #     - DEVICE_SERVICE_URL=http://device-service:6003
+  #   depends_on:
+  #     emqx:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     device-service:
+  #       condition: service_healthy
+  #   networks:
+  #     - baby-monitor-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:6007/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Admin Service (Domain Management)
+  admin-service:
+    build:
+      context: ./services/admin-service
+      dockerfile: Dockerfile
+    container_name: baby-monitor-admin-service
+    restart: unless-stopped
+    ports:
+      - "6009:6009"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - baby-monitor-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6009/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== 前端服务 ====================
+
+  # Admin Dashboard (前端服务暂未实现)
+  # 如需部署前端，请参考 deployment/ 目录下的前端部署文档
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  emqx_data:
+    driver: local
+  emqx_log:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  baby-monitor-network:
+    driver: bridge

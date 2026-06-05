@@ -1,0 +1,25 @@
+{
+  "name": "@baby-monitor/mock-device",
+  "version": "1.0.0",
+  "description": "Mock MQTT Device for Baby Monitor IoT Platform Testing",
+  "main": "mock-device.js",
+  "scripts": {
+    "start": "node mock-device.js",
+    "camera": "node mock-device.js camera-001",
+    "screen": "node mock-device.js screen-001",
+    "multi": "node start-mock-devices.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.0.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "mqtt",
+    "iot",
+    "mock",
+    "device",
+    "testing"
+  ],
+  "author": "Baby Monitor Team",
+  "license": "MIT"
+}

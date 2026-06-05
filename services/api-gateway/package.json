@@ -1,0 +1,33 @@
+{
+  "name": "@baby-monitor/api-gateway",
+  "version": "1.0.0",
+  "description": "API Gateway for Smart Home IoT Platform",
+  "main": "dist/configuration.js",
+  "scripts": {
+    "dev": "midway-bin dev --port=6001",
+    "build": "midway-bin build",
+    "test": "midway-bin test --ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@midwayjs/bootstrap": "^3.0.0",
+    "@midwayjs/core": "^3.0.0",
+    "@midwayjs/koa": "^3.0.0",
+    "@midwayjs/jwt": "^3.0.0",
+    "@midwayjs/swagger": "^3.0.0",
+    "@midwayjs/validate": "^3.0.0",
+    "@midwayjs/redis": "^3.0.0",
+    "@midwayjs/logger": "^3.0.0",
+    "@baby-monitor/aws-credentials": "file:../../common/aws-credentials",
+    "@baby-monitor/shared-types": "file:../../common/shared-types",
+    "@baby-monitor/shared-utils": "file:../../common/shared-utils",
+    "axios": "^1.6.0",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

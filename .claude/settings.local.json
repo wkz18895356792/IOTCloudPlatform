@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(npm install:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker logout:*)",
+      "Bash(findstr:*)",
+      "Bash(docker pull:*)",
+      "Bash(docker info:*)",
+      "Bash(for:*)",
+      "Bash(do echo:*)",
+      "Bash(break:*)",
+      "Bash(done)",
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(do sed:*)",
+      "Bash(npm run build:*)",
+      "Bash(del:*)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(timeout:*)",
+      "Bash(taskkill:*)",
+      "Bash(ping:*)",
+      "Bash(mysql:*)",
+      "Bash(where mysql)",
+      "Bash(node:*)",
+      "Bash(npm test)",
+      "Bash(redis-cli:*)",
+      "Bash(docker logs:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(wmic:*)",
+      "Bash(tasklist:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(npx jest:*)",
+      "Read(//d/Workspace/BabyMonitor/**)",
+      "Bash(npx @react-native-community/cli init HomeGuard --directory HomeGuard --skip-git-init --pm npm)"
+    ]
+  }
+}

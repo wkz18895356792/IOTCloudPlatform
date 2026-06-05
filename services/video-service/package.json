@@ -1,0 +1,46 @@
+{
+  "name": "@baby-monitor/video-service",
+  "version": "1.0.0",
+  "description": "Video Service for Smart Home IoT Platform",
+  "main": "dist/configuration.js",
+  "scripts": {
+    "dev": "midway-bin dev --port=6004",
+    "build": "midway-bin build",
+    "test": "midway-bin test --ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kinesis-video": "^3.600.0",
+    "@aws-sdk/client-kinesis-video-archived-media": "^3.600.0",
+    "@aws-sdk/client-rekognition": "^3.600.0",
+    "@midwayjs/bootstrap": "^3.0.0",
+    "@midwayjs/core": "^3.0.0",
+    "@midwayjs/koa": "^3.0.0",
+    "@midwayjs/logger": "^3.0.0",
+    "@midwayjs/redis": "^3.0.0",
+    "@midwayjs/swagger": "^3.0.0",
+    "@midwayjs/typeorm": "^3.0.0",
+    "@midwayjs/validate": "^3.0.0",
+    "@midwayjs/ws": "^3.0.0",
+    "dotenv": "^17.2.3",
+    "fluent-ffmpeg": "^2.1.2",
+    "hls-parser": "^0.10.7",
+    "mysql2": "^3.6.0",
+    "sdp-transform": "^2.14.1",
+    "tencentcloud-sdk-nodejs": "^4.0.800",
+    "tencentcloud-sdk-nodejs-iotcloud": "^4.1.171",
+    "tencentcloud-sdk-nodejs-iotexplorer": "^4.1.200",
+    "tencentcloud-sdk-nodejs-iotvideo": "^4.1.148",
+    "typeorm": "^0.3.28",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/fluent-ffmpeg": "^2.1.24",
+    "@types/node": "^20.0.0",
+    "@types/sdp-transform": "^2.4.7",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.0.0"
+  }
+}

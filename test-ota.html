@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<!--
+  OTA 固件升级完整流程测试界面
+
+  使用方式：
+    方式一：直接在浏览器中打开此文件
+    方式二（推荐，避免 CORS 问题）：
+      cd IOTCloudPlatform
+      python -m http.server 8080
+      浏览器打开 http://localhost:8080/test-ota.html
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTA 固件升级测试</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      min-height: 100vh;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+
+    /* ===== Top Bar ===== */
+    .topbar {
+      background: #16213e;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid #2a2a4a;
+      flex-wrap: wrap;
+    }
+    .topbar h1 {
+      color: #00d4ff;
+      font-size: 20px;
+      white-space: nowrap;
+    }
+    .topbar .config {
+      display: flex;
+      gap: 10px;
+      flex: 1;
+      min-width: 300px;
+    }
+    .topbar input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #0f1729;
+      color: #fff;
+      font-size: 13px;
+      font-family: monospace;
+    }
+    .topbar input:focus { outline: none; border-color: #00d4ff; }
+
+    /* ===== Stepper ===== */
+    .stepper {
+      display: flex;
+      justify-content: center;
+      padding: 20px 24px;
+      gap: 4px;
+      overflow-x: auto;
+    }
+    .step-item {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .step-num {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 13px;
+      background: #333;
+      color: #888;
+      transition: all 0.3s;
+    }
+    .step-item.active .step-num { background: #00d4ff; color: #000; }
+    .step-item.done .step-num { background: #2ed573; color: #000; }
+    .step-label {
+      margin-left: 6px;
+      font-size: 13px;
+      color: #888;
+    }
+    .step-item.active .step-label { color: #00d4ff; }
+    .step-item.done .step-label { color: #2ed573; }
+    .step-connector {
+      width: 30px;
+      height: 2px;
+      background: #333;
+      margin: 0 6px;
+      align-self: center;
+    }
+    .step-item.done + .step-connector,
+    .step-connector.done { background: #2ed573; }
+
+    /* ===== Main Panel ===== */
+    .main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 24px;
+    }
+    .panel {
+      display: none;
+      background: #16213e;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel.active { display: block; }
+    .panel-header {
+      padding: 16px 20px;
+      background: #1a2744;
+      border-bottom: 1px solid #2a2a4a;
+      font-weight: 600;
+      color: #00d4ff;
+      font-size: 16px;
+    }
+    .panel-body {
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+    }
+    .panel-form { flex: 1; min-width: 0; }
+    .panel-response {
+      flex: 1;
+      min-width: 0;
+    }
+    .panel-response pre {
+      background: #0f1729;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 12px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      overflow: auto;
+      max-height: 500px;
+      border: 1px solid #2a2a4a;
+      color: #c0c0c0;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* ===== Form Elements ===== */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      color: #aaa;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #0f1729;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #00d4ff;
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-row {
+      display: flex;
+      gap: 12px;
+    }
+    .form-row .form-group { flex: 1; }
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .form-check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #00d4ff;
+    }
+    .form-info {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      margin-left: 6px;
+    }
+    .form-info.sha { background: #2a2a4a; color: #aaa; word-break: break-all; }
+
+    /* File drop zone */
+    .file-zone {
+      border: 2px dashed #333;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.3s;
+      margin-bottom: 14px;
+      position: relative;
+    }
+    .file-zone:hover { border-color: #00d4ff; }
+    .file-zone.dragover { border-color: #00d4ff; background: rgba(0, 212, 255, 0.05); }
+    .file-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .file-zone .file-info { color: #888; font-size: 13px; }
+    .file-zone .file-name { color: #00d4ff; font-weight: 600; }
+
+    /* Progress bar */
+    .progress-wrap {
+      margin-bottom: 14px;
+      display: none;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-bar {
+      height: 8px;
+      background: #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00d4ff, #2ed573);
+      width: 0%;
+      transition: width 0.3s;
+      border-radius: 4px;
+    }
+    .progress-text {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 4px;
+      text-align: right;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-primary { background: #00d4ff; color: #000; }
+    .btn-primary:hover { background: #00a8cc; }
+    .btn-primary:disabled { background: #555; color: #999; cursor: not-allowed; }
+    .btn-success { background: #2ed573; color: #000; }
+    .btn-success:hover { background: #26b85f; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-danger { background: #ff4757; color: #fff; }
+    .btn-danger:hover { background: #e0404f; }
+    .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+    /* ===== Version Table ===== */
+    .fw-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .fw-table th {
+      background: #1a2744;
+      padding: 8px 10px;
+      text-align: left;
+      color: #aaa;
+      font-weight: 600;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .fw-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #2a2a4a;
+      vertical-align: middle;
+    }
+    .fw-table tr:hover td { background: rgba(0, 212, 255, 0.04); }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag-beta { background: #ffa502; color: #000; }
+    .tag-forced { background: #ff4757; color: #fff; }
+    .tag-active { background: #2ed573; color: #000; }
+
+    /* ===== Task Result ===== */
+    .task-result { margin-top: 14px; }
+    .task-item {
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .task-item.ok { background: rgba(46, 213, 115, 0.15); border: 1px solid #2ed573; }
+    .task-item.fail { background: rgba(255, 71, 87, 0.15); border: 1px solid #ff4757; }
+    .task-item .reason { color: #ff8a8a; font-size: 12px; }
+
+    /* ===== Tabs ===== */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid #2a2a4a;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      padding: 8px 18px;
+      background: none;
+      color: #888;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .tab-btn.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ===== Polling ===== */
+    .poll-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #ffa502;
+    }
+    .poll-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ffa502;
+      animation: blink 1.2s infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ===== Log ===== */
+    .log-panel {
+      max-width: 1200px;
+      margin: 0 auto 24px;
+      padding: 0 24px;
+    }
+    .log-box {
+      background: #16213e;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .log-header {
+      padding: 10px 20px;
+      background: #1a2744;
+      border-bottom: 1px solid #2a2a4a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      color: #00d4ff;
+      font-size: 14px;
+    }
+    .log-body {
+      padding: 14px 20px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 220px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.info { color: #888; }
+    .log-line.success { color: #2ed573; }
+    .log-line.error { color: #ff4757; }
+    .log-line.warn { color: #ffa502; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 800px) {
+      .panel-body { flex-direction: column; }
+      .topbar { flex-direction: column; align-items: stretch; }
+      .stepper { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <h1>OTA 固件升级测试</h1>
+  <div class="config">
+    <input type="text" id="apiBase" value="http://localhost:6001" placeholder="API Base URL">
+    <input type="text" id="account" value="admin" placeholder="账号" style="max-width:120px;">
+    <input type="password" id="password" value="ChangeThisPassword123!@" placeholder="密码" style="max-width:200px;">
+    <button class="btn btn-sm btn-primary" id="loginBtn" onclick="login()">登录</button>
+    <span id="loginStatus" style="font-size:12px;color:#888;white-space:nowrap;"></span>
+    <input type="hidden" id="token">
+  </div>
+</div>
+
+<!-- Stepper -->
+<div class="stepper" id="stepper"></div>
+
+<!-- Main Panels -->
+<div class="main">
+
+  <!-- Step 1: Get Upload URL -->
+  <div class="panel" id="panel-1">
+    <div class="panel-header">Step 1: 获取上传预签名 URL</div>
+    <div class="panel-body">
+      <div class="panel-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Product ID</label>
+            <input type="text" id="s1-productId" placeholder="e.g. E73">
+          </div>
+          <div class="form-group">
+            <label>Version</label>
+            <input type="text" id="s1-version" placeholder="e.g. 1.0.2">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>固件文件</label>
+          <div class="file-zone" id="fileZone">
+            <input type="file" id="s1-file" accept=".bin,.fw,.img,.zip">
+            <div class="file-info" id="fileInfo">点击或拖拽选择固件文件</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>SHA-256 <span class="form-info sha" id="s1-checksum"></span></label>
+        </div>
+        <div class="form-group">
+          <label>File Size <span class="form-info sha" id="s1-fileSize"></span></label>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="s1-btn" onclick="getUploadUrl()">获取预签名 URL</button>
+        </div>
+      </div>
+      <div class="panel-response">
+        <pre id="s1-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Upload File -->
+  <div class="panel" id="panel-2">
+    <div class="panel-header">Step 2: 上传固件文件</div>
+    <div class="panel-body">
+      <div class="panel-form">
+        <div class="form-group">
+          <label>Presigned URL</label>
+          <input type="text" id="s2-url" readonly>
+        </div>
+        <div class="form-group">
+          <label>Storage Key</label>
+          <input type="text" id="s2-key" readonly>
+        </div>
+        <div class="progress-wrap" id="s2-progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="s2-progress-fill"></div></div>
+          <div class="progress-text" id="s2-progress-text">0%</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="s2-btn" onclick="uploadFile()">上传文件</button>
+        </div>
+      </div>
+      <div class="panel-response">
+        <pre id="s2-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Confirm Upload -->
+  <div class="panel" id="panel-3">
+    <div class="panel-header">Step 3: 确认上传 / 创建版本记录</div>
+    <div class="panel-body">
+      <div class="panel-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Product ID</label>
+            <input type="text" id="s3-productId" readonly>
+          </div>
+          <div class="form-group">
+            <label>Version</label>
+            <input type="text" id="s3-version" readonly>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>File Key</label>
+            <input type="text" id="s3-fileKey" readonly>
+          </div>
+          <div class="form-group">
+            <label>File Size</label>
+            <input type="text" id="s3-fileSize" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Checksum</label>
+          <input type="text" id="s3-checksum" readonly>
+        </div>
+        <div class="form-group">
+          <label>Release Notes</label>
+          <textarea id="s3-releaseNotes" rows="2" placeholder="版本更新说明（可选）"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-check">
+            <input type="checkbox" id="s3-isForced">
+            <label for="s3-isForced">强制升级</label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="s3-isBeta">
+            <label for="s3-isBeta">测试版</label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Min Version (可选)</label>
+            <input type="text" id="s3-minVersion" placeholder="最低可升级版本">
+          </div>
+          <div class="form-group">
+            <label>Max Version (可选)</label>
+            <input type="text" id="s3-maxVersion" placeholder="最高可升级版本">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="s3-btn" onclick="confirmUpload()">确认上传</button>
+        </div>
+      </div>
+      <div class="panel-response">
+        <pre id="s3-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Query Versions -->
+  <div class="panel" id="panel-4">
+    <div class="panel-header">Step 4: 查询固件版本</div>
+    <div class="panel-body" style="flex-direction: column;">
+      <div style="display: flex; gap: 12px; align-items: flex-end;">
+        <div class="form-group" style="flex:1; margin:0;">
+          <label>Product ID</label>
+          <input type="text" id="s4-productId" placeholder="e.g. E73">
+        </div>
+        <button class="btn btn-primary" onclick="queryVersions()">查询</button>
+      </div>
+      <div style="margin-top: 16px; overflow-x: auto;">
+        <table class="fw-table" id="fw-table" style="display:none;">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Size</th>
+              <th>Checksum</th>
+              <th>Tags</th>
+              <th>Uploaded At</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="fw-tbody"></tbody>
+        </table>
+      </div>
+      <div class="panel-response" style="margin-top: 16px;">
+        <pre id="s4-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5: Create OTA Tasks -->
+  <div class="panel" id="panel-5">
+    <div class="panel-header">Step 5: 创建 OTA 升级任务</div>
+    <div class="panel-body">
+      <div class="panel-form">
+        <div class="form-group">
+          <label>Firmware ID</label>
+          <input type="text" id="s5-firmwareId" placeholder="从 Step 3 或 Step 4 获取">
+        </div>
+        <div class="form-group">
+          <label>设备 ID（多个设备用逗号或换行分隔）</label>
+          <textarea id="s5-deviceIds" rows="3" placeholder="E73-140000082u&#10;E73-140000083u, E73-140000084u"></textarea>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="s5-btn" onclick="createOTATask()">创建任务</button>
+        </div>
+        <div class="task-result" id="s5-result"></div>
+      </div>
+      <div class="panel-response">
+        <pre id="s5-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 6: Query Task Status -->
+  <div class="panel" id="panel-6">
+    <div class="panel-header">Step 6: 查询任务状态</div>
+    <div class="panel-body" style="flex-direction: column;">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(6, 'task')">按任务 ID</button>
+        <button class="tab-btn" onclick="switchTab(6, 'device')">按设备 ID</button>
+      </div>
+      <div class="tab-content active" id="tab6-task">
+        <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+          <div class="form-group" style="flex:1; margin:0;">
+            <label>Task ID</label>
+            <input type="text" id="s6-taskId" placeholder="OTA 任务 ID">
+          </div>
+          <button class="btn btn-primary" onclick="queryTaskDetail()">查询</button>
+          <button class="btn btn-sm btn-success" id="s6-poll-btn" onclick="togglePoll()">自动轮询</button>
+          <span class="poll-indicator" id="s6-poll-indicator" style="display:none;">
+            <span class="poll-dot"></span> 轮询中
+          </span>
+        </div>
+      </div>
+      <div class="tab-content" id="tab6-device">
+        <div style="display: flex; gap: 12px; align-items: flex-end;">
+          <div class="form-group" style="flex:1; margin:0;">
+            <label>Device ID</label>
+            <input type="text" id="s6-deviceId" placeholder="设备序列号">
+          </div>
+          <button class="btn btn-primary" onclick="queryDeviceTasks()">查询</button>
+        </div>
+      </div>
+      <div class="panel-response" style="margin-top: 16px;">
+        <pre id="s6-res">等待操作...</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log Panel -->
+<div class="log-panel">
+  <div class="log-box">
+    <div class="log-header">
+      <span>API Log</span>
+      <button class="btn btn-sm" style="background:#333;color:#aaa;" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+</div>
+
+<script>
+// ===== State =====
+const state = {
+  currentStep: 1,
+  selectedFile: null,
+  checksum: '',
+  fileSize: 0,
+  presignedUrl: '',
+  fileKey: '',
+  firmwareId: '',
+  taskIds: [],
+  polling: false,
+  pollTimer: null,
+};
+
+const STEPS = [
+  { num: 1, label: '预签名 URL' },
+  { num: 2, label: '上传文件' },
+  { num: 3, label: '确认版本' },
+  { num: 4, label: '查询版本' },
+  { num: 5, label: '创建任务' },
+  { num: 6, label: '任务状态' },
+];
+
+// ===== Login =====
+async function login() {
+  const base = apiBase();
+  const account = $('account').value.trim();
+  const password = $('password').value;
+  if (!account || !password) { $('loginStatus').textContent = '请填写账号密码'; $('loginStatus').style.color = '#ff4757'; return; }
+
+  const btn = $('loginBtn');
+  btn.disabled = true;
+  btn.textContent = '登录中...';
+  $('loginStatus').textContent = '';
+  log('POST /api/auth/login');
+
+  try {
+    const res = await fetch(base + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'password', account, password }),
+    });
+    const json = await res.json();
+
+    if (json.code === 0 && json.data?.accessToken) {
+      $('token').value = json.data.accessToken;
+      $('loginStatus').textContent = '已登录: ' + (json.data.user?.username || account);
+      $('loginStatus').style.color = '#2ed573';
+      log('登录成功, token=' + json.data.accessToken.substring(0, 20) + '...', 'success');
+    } else {
+      $('loginStatus').textContent = json.message || '登录失败';
+      $('loginStatus').style.color = '#ff4757';
+      log('登录失败: ' + (json.message || '未知错误'), 'error');
+    }
+  } catch (e) {
+    $('loginStatus').textContent = '连接失败';
+    $('loginStatus').style.color = '#ff4757';
+    log('登录请求失败: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '登录';
+}
+
+// ===== Init =====
+(function init() {
+  renderStepper();
+  setStep(1);
+  setupFileZone();
+  login();
+})();
+
+function renderStepper() {
+  const el = document.getElementById('stepper');
+  el.innerHTML = STEPS.map((s, i) => {
+    const connector = i < STEPS.length - 1 ? '<div class="step-connector" id="conn-' + (i + 1) + '"></div>' : '';
+    return '<div class="step-item" id="step-' + s.num + '" onclick="setStep(' + s.num + ')">'
+      + '<div class="step-num">' + s.num + '</div>'
+      + '<div class="step-label">' + s.label + '</div>'
+      + '</div>' + connector;
+  }).join('');
+}
+
+function setStep(n) {
+  state.currentStep = n;
+  STEPS.forEach(s => {
+    const el = document.getElementById('step-' + s.num);
+    const panel = document.getElementById('panel-' + s.num);
+    el.className = 'step-item';
+    panel.classList.remove('active');
+    if (s.num === n) el.classList.add('active');
+  });
+  document.getElementById('panel-' + n).classList.add('active');
+}
+
+function markDone(n) {
+  const el = document.getElementById('step-' + n);
+  if (!el.classList.contains('active')) el.className = 'step-item done';
+  const conn = document.getElementById('conn-' + n);
+  if (conn) conn.classList.add('done');
+}
+
+// ===== Utility =====
+function $(id) { return document.getElementById(id); }
+
+function log(msg, type = 'info') {
+  const body = $('logBody');
+  const time = new Date().toLocaleTimeString();
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.textContent = '[' + time + '] ' + msg;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() { $('logBody').innerHTML = ''; }
+
+function showRes(id, data) {
+  $(id).textContent = JSON.stringify(data, null, 2);
+}
+
+function apiBase() { return $('apiBase').value.replace(/\/+$/, ''); }
+function token() { return $('token').value.trim(); }
+
+async function api(method, path, body) {
+  const url = apiBase() + path;
+  const headers = { 'Content-Type': 'application/json' };
+  if (token()) headers['Authorization'] = 'Bearer ' + token();
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  log(method + ' ' + path);
+  const res = await fetch(url, opts);
+  const json = await res.json();
+  log(res.status + ' ' + (json.message || ''), res.ok ? 'success' : 'error');
+  return { ok: res.ok, status: res.status, data: json };
+}
+
+// ===== File Zone =====
+function setupFileZone() {
+  const zone = $('fileZone');
+  const input = $('s1-file');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+}
+
+async function handleFile(file) {
+  state.selectedFile = file;
+  state.fileSize = file.size;
+  $('fileInfo').innerHTML = '<span class="file-name">' + file.name + '</span> (' + formatBytes(file.size) + ')';
+  $('s1-fileSize').textContent = formatBytes(file.size) + ' (' + file.size + ' bytes)';
+  $('s1-checksum').textContent = '计算中...';
+  try {
+    state.checksum = await computeSHA256(file);
+    $('s1-checksum').textContent = state.checksum;
+    log('SHA-256: ' + state.checksum, 'success');
+  } catch (e) {
+    $('s1-checksum').textContent = '计算失败: ' + e.message;
+    log('SHA-256 计算失败: ' + e.message, 'error');
+  }
+}
+
+async function computeSHA256(file) {
+  const buffer = await file.arrayBuffer();
+  const hashBuf = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+// ===== Step 1: Get Upload URL =====
+async function getUploadUrl() {
+  const productId = $('s1-productId').value.trim();
+  const version = $('s1-version').value.trim();
+  if (!productId || !version) return alert('请填写 Product ID 和 Version');
+  if (!state.checksum) return alert('请先选择固件文件');
+
+  const btn = $('s1-btn');
+  btn.disabled = true;
+  btn.textContent = '请求中...';
+
+  const body = {
+    productId,
+    version,
+    fileSize: state.fileSize,
+    checksum: state.checksum,
+    checksumType: 'sha256',
+  };
+  const { ok, data } = await api('POST', '/api/firmware/upload-url', body);
+  showRes('s1-res', data);
+
+  if (ok && data.code === 0 && data.data) {
+    state.presignedUrl = data.data.uploadUrl;
+    state.fileKey = data.data.key;
+    markDone(1);
+    // Pre-fill step 2
+    $('s2-url').value = state.presignedUrl;
+    $('s2-key').value = state.fileKey;
+    log('预签名 URL 获取成功, key=' + state.fileKey, 'success');
+    setStep(2);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '获取预签名 URL';
+}
+
+// ===== Step 2: Upload File =====
+function uploadFile() {
+  if (!state.presignedUrl) return alert('请先获取预签名 URL');
+  if (!state.selectedFile) return alert('请先选择固件文件');
+
+  const btn = $('s2-btn');
+  btn.disabled = true;
+  btn.textContent = '上传中...';
+
+  const progressWrap = $('s2-progress-wrap');
+  const progressFill = $('s2-progress-fill');
+  const progressText = $('s2-progress-text');
+  progressWrap.classList.add('visible');
+
+  const xhr = new XMLHttpRequest();
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) {
+      const pct = Math.round(e.loaded / e.total * 100);
+      progressFill.style.width = pct + '%';
+      progressText.textContent = pct + '% (' + formatBytes(e.loaded) + ' / ' + formatBytes(e.total) + ')';
+    }
+  };
+  xhr.onload = () => {
+    btn.disabled = false;
+    btn.textContent = '上传文件';
+    if (xhr.status >= 200 && xhr.status < 300) {
+      showRes('s2-res', { status: xhr.status, statusText: xhr.statusText, message: '上传成功' });
+      log('文件上传成功 (' + xhr.status + ')', 'success');
+      markDone(2);
+      // Pre-fill step 3
+      $('s3-productId').value = $('s1-productId').value.trim();
+      $('s3-version').value = $('s1-version').value.trim();
+      $('s3-fileKey').value = state.fileKey;
+      $('s3-fileSize').value = state.fileSize;
+      $('s3-checksum').value = state.checksum;
+      setStep(3);
+    } else {
+      showRes('s2-res', { status: xhr.status, statusText: xhr.statusText, body: xhr.responseText.substring(0, 500) });
+      log('文件上传失败 (' + xhr.status + ')', 'error');
+    }
+  };
+  xhr.onerror = () => {
+    btn.disabled = false;
+    btn.textContent = '上传文件';
+    showRes('s2-res', { error: '网络错误，请检查 CORS 或网络连接' });
+    log('文件上传网络错误', 'error');
+  };
+  xhr.open('PUT', state.presignedUrl);
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  log('PUT [presigned URL] ...');
+  xhr.send(state.selectedFile);
+}
+
+// ===== Step 3: Confirm Upload =====
+async function confirmUpload() {
+  const body = {
+    productId: $('s3-productId').value.trim(),
+    version: $('s3-version').value.trim(),
+    releaseNotes: $('s3-releaseNotes').value.trim() || $('s3-version').value.trim(),
+    fileKey: $('s3-fileKey').value.trim(),
+    fileSize: parseInt($('s3-fileSize').value),
+    checksum: $('s3-checksum').value.trim(),
+    checksumType: 'sha256',
+    isForced: $('s3-isForced').checked,
+    isBeta: $('s3-isBeta').checked,
+  };
+  const min = $('s3-minVersion').value.trim();
+  const max = $('s3-maxVersion').value.trim();
+  if (min) body.minVersion = min;
+  if (max) body.maxVersion = max;
+
+  const btn = $('s3-btn');
+  btn.disabled = true;
+  btn.textContent = '确认中...';
+
+  const { ok, data } = await api('POST', '/api/firmware/versions/confirm', body);
+  showRes('s3-res', data);
+
+  if (ok && data.code === 0 && data.data) {
+    state.firmwareId = data.data.id;
+    markDone(3);
+    log('版本记录创建成功, firmwareId=' + state.firmwareId, 'success');
+    // Pre-fill step 4 & 5
+    $('s4-productId').value = body.productId;
+    $('s5-firmwareId').value = state.firmwareId;
+    setStep(4);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '确认上传';
+}
+
+// ===== Step 4: Query Versions =====
+async function queryVersions() {
+  const productId = $('s4-productId').value.trim();
+  if (!productId) return alert('请填写 Product ID');
+
+  const { ok, data } = await api('GET', '/api/firmware/versions/' + encodeURIComponent(productId));
+  showRes('s4-res', data);
+
+  if (ok && data.code === 0 && Array.isArray(data.data)) {
+    renderVersionTable(data.data);
+    markDone(4);
+    log('查询到 ' + data.data.length + ' 个固件版本', 'success');
+  }
+}
+
+function renderVersionTable(versions) {
+  const table = $('fw-table');
+  const tbody = $('fw-tbody');
+  table.style.display = 'table';
+  tbody.innerHTML = versions.map(v => {
+    const tags = [];
+    if (v.isBeta) tags.push('<span class="tag tag-beta">Beta</span>');
+    if (v.isForced) tags.push('<span class="tag tag-forced">Forced</span>');
+    if (v.isActive) tags.push('<span class="tag tag-active">Active</span>');
+    return '<tr>'
+      + '<td>' + esc(v.version) + '</td>'
+      + '<td>' + formatBytes(parseInt(v.fileSize)) + '</td>'
+      + '<td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="' + esc(v.checksum) + '">' + esc(v.checksum ? v.checksum.substring(0, 16) + '...' : '') + '</td>'
+      + '<td>' + tags.join(' ') + '</td>'
+      + '<td>' + (v.uploadedAt ? new Date(v.uploadedAt).toLocaleString() : '-') + '</td>'
+      + '<td><button class="btn btn-sm btn-success" onclick="selectFirmware(\'' + esc(v.id) + '\',\'' + esc(v.version) + '\')">选择</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function selectFirmware(id, version) {
+  state.firmwareId = id;
+  $('s5-firmwareId').value = id;
+  log('已选择固件: ' + version + ' (' + id + ')', 'success');
+  setStep(5);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ===== Step 5: Create OTA Task =====
+async function createOTATask() {
+  const firmwareId = $('s5-firmwareId').value.trim();
+  if (!firmwareId) return alert('请填写 Firmware ID');
+
+  const rawIds = $('s5-deviceIds').value.trim();
+  if (!rawIds) return alert('请填写设备 ID');
+  const deviceIds = rawIds.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  if (deviceIds.length === 0) return alert('请填写至少一个设备 ID');
+
+  const btn = $('s5-btn');
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+
+  let body, path;
+  if (deviceIds.length === 1) {
+    body = { deviceId: deviceIds[0], firmwareId };
+    path = '/api/firmware/ota/tasks';
+  } else {
+    body = { deviceIds, firmwareId };
+    path = '/api/firmware/ota/tasks';
+  }
+
+  const { ok, data } = await api('POST', path, body);
+  showRes('s5-res', data);
+
+  if (ok && data.code === 0) {
+    markDone(5);
+    renderTaskResult(data.data, deviceIds.length > 1);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '创建任务';
+}
+
+function renderTaskResult(data, isBatch) {
+  const container = $('s5-result');
+  container.innerHTML = '';
+
+  if (isBatch && data.succeeded) {
+    // Batch mode
+    state.taskIds = data.succeeded.map(t => t.id);
+    const summary = document.createElement('div');
+    summary.style.marginBottom = '10px';
+    summary.innerHTML = '<span style="color:#2ed573;">成功: ' + data.succeeded.length + '</span> / '
+      + '<span style="color:#ff4757;">失败: ' + data.failed.length + '</span>';
+    container.appendChild(summary);
+
+    data.succeeded.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'task-item ok';
+      div.innerHTML = '<span>' + esc(t.deviceId) + ': ' + esc(t.fromVersion) + ' → ' + esc(t.toVersion) + ' (' + esc(t.status) + ')</span>'
+        + '<span style="font-size:11px;color:#aaa;">' + esc(t.id) + '</span>';
+      container.appendChild(div);
+    });
+    data.failed.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'task-item fail';
+      div.innerHTML = '<span>' + esc(f.deviceId) + '</span><span class="reason">' + esc(f.reason) + '</span>';
+      container.appendChild(div);
+    });
+    log('批量任务创建完成: 成功 ' + data.succeeded.length + ', 失败 ' + data.failed.length, 'success');
+  } else {
+    // Single mode
+    state.taskIds = [data.id];
+    const div = document.createElement('div');
+    div.className = 'task-item ok';
+    div.innerHTML = '<span>' + esc(data.deviceId) + ': ' + esc(data.fromVersion) + ' → ' + esc(data.toVersion) + ' (' + esc(data.status) + ')</span>'
+      + '<span style="font-size:11px;color:#aaa;">' + esc(data.id) + '</span>';
+    container.appendChild(div);
+    log('OTA 任务创建成功: ' + data.id, 'success');
+  }
+
+  // Pre-fill step 6
+  if (state.taskIds.length > 0) {
+    $('s6-taskId').value = state.taskIds[0];
+    $('s6-deviceId').value = $('s5-deviceIds').value.split(/[,\n]/)[0].trim();
+    setStep(6);
+  }
+}
+
+// ===== Step 6: Query Tasks =====
+async function queryTaskDetail() {
+  const taskId = $('s6-taskId').value.trim();
+  if (!taskId) return alert('请填写 Task ID');
+  const { ok, data } = await api('GET', '/api/firmware/ota/tasks/' + encodeURIComponent(taskId));
+  showRes('s6-res', data);
+}
+
+async function queryDeviceTasks() {
+  const deviceId = $('s6-deviceId').value.trim();
+  if (!deviceId) return alert('请填写 Device ID');
+  const { ok, data } = await api('GET', '/api/firmware/devices/' + encodeURIComponent(deviceId) + '/ota/tasks?limit=20&offset=0');
+  showRes('s6-res', data);
+}
+
+function togglePoll() {
+  if (state.polling) {
+    clearInterval(state.pollTimer);
+    state.polling = false;
+    $('s6-poll-indicator').style.display = 'none';
+    $('s6-poll-btn').textContent = '自动轮询';
+    $('s6-poll-btn').className = 'btn btn-sm btn-success';
+  } else {
+    state.polling = true;
+    $('s6-poll-indicator').style.display = 'inline-flex';
+    $('s6-poll-btn').textContent = '停止轮询';
+    $('s6-poll-btn').className = 'btn btn-sm btn-danger';
+    queryTaskDetail();
+    state.pollTimer = setInterval(() => {
+      const taskId = $('s6-taskId').value.trim();
+      if (!taskId) { togglePoll(); return; }
+      queryTaskDetail();
+    }, 3000);
+  }
+}
+
+function switchTab(step, tab) {
+  const panel = $('panel-' + step);
+  panel.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  panel.querySelector('.tab-btn:nth-child(' + (tab === 'task' ? 1 : 2) + ')').classList.add('active');
+  $('tab6-' + tab).classList.add('active');
+}
+</script>
+</body>
+</html>

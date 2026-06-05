@@ -1,0 +1,16 @@
+{
+  "name": "@baby-monitor/shared-types",
+  "version": "1.0.0",
+  "description": "Shared type definitions for Smart Home IoT Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

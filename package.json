@@ -1,0 +1,44 @@
+{
+  "name": "baby-monitor-iot-platform",
+  "version": "1.0.0",
+  "description": "Smart Home IoT Cloud Platform",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "common/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --concurrency=20",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:migrate": "ts-node database/migrations/run.ts",
+    "db:rollback": "ts-node database/migrations/rollback.ts",
+    "dev:api-gateway": "npm run dev --workspace=@baby-monitor/api-gateway",
+    "dev:device-service": "npm run dev --workspace=@baby-monitor/device-service",
+    "dev:device-gateway": "npm run dev --workspace=@baby-monitor/device-gateway",
+    "dev:video-service": "npm run dev --workspace=@baby-monitor/video-service",
+    "dev:storage-service": "npm run dev --workspace=@baby-monitor/storage-service",
+    "dev:baby-service": "npm run dev --workspace=@baby-monitor/baby-service",
+    "dev:user-service": "npm run dev --workspace=@baby-monitor/user-service",
+    "dev:admin-service": "npm run dev --workspace=@baby-monitor/admin-service"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "@types/nodemailer": "^7.0.11",
+    "dotenv": "^17.2.3",
+    "mysql2": "^3.16.3",
+    "socket.io-client": "^4.8.3",
+    "ts-node": "^10.9.0",
+    "turbo": "^1.10.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "packageManager": "npm@10.9.2"
+}

@@ -1,0 +1,69 @@
+# Environment variables
+.env
+.env.example
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+out/
+
+# Midway.js specific
+*.log
+logs/
+run/
+*.pid
+
+# Testing
+coverage/
+.nyc_output/
+*.test.js.snap
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+.turbo/
+
+# Docker
+*.pidb
+
+# Database
+*.sql.backup
+*.sqlite
+*.db
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Misc
+tst.md
+
+# TLS certificates (use scripts/generate-certs.sh to generate)
+certs/*.key
+certs/*.crt
+certs/*.pem
+certs/*.csr
+certs/*.srl
+
+release/
+baby-monitor-release.zip
+dist-packages/

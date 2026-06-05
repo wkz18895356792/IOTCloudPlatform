@@ -1,0 +1,145 @@
+---
+# Service Deployment Template
+# Usage: Replace SERVICE_NAME with actual service name (e.g., api-gateway, user-service, etc.)
+# Replace SERVICE_PORT with actual port (e.g., 6001, 6002, etc.)
+
+---
+# ConfigMap for Service Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: SERVICE_NAME-config
+  namespace: baby-monitor
+data:
+  NODE_ENV: "production"
+  # Add service-specific configuration here
+
+---
+# Secret for Service
+apiVersion: v1
+kind: Secret
+metadata:
+  name: SERVICE_NAME-secret
+  namespace: baby-monitor
+type: Opaque
+data:
+  # Add base64 encoded secrets here
+
+---
+# Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: SERVICE_NAME
+  namespace: baby-monitor
+  labels:
+    app: SERVICE_NAME
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: SERVICE_NAME
+  template:
+    metadata:
+      labels:
+        app: SERVICE_NAME
+    spec:
+      containers:
+      - name: SERVICE_NAME
+        image: baby-monitor/SERVICE_NAME:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: SERVICE_PORT
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: SERVICE_NAME-config
+              key: NODE_ENV
+        - name: MYSQL_HOST
+          value: mysql
+        - name: MYSQL_PORT
+          value: "3306"
+        - name: MYSQL_DATABASE
+          value: smart_home
+        - name: MYSQL_USER
+          value: smart_home
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        # Add service-specific environment variables here
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: SERVICE_PORT
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: SERVICE_PORT
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: SERVICE_NAME
+  namespace: baby-monitor
+  labels:
+    app: SERVICE_NAME
+spec:
+  type: ClusterIP
+  ports:
+  - port: SERVICE_PORT
+    targetPort: SERVICE_PORT
+  selector:
+    app: SERVICE_NAME
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: SERVICE_NAME-hpa
+  namespace: baby-monitor
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: SERVICE_NAME
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

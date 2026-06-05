@@ -1,0 +1,6 @@
+-- 删除可能重复的索引
+ALTER TABLE `users` DROP INDEX IF EXISTS `IDX_97672ac88f789774dd47f7c8be`;
+ALTER TABLE `users` DROP INDEX IF EXISTS `IDX_users_phone`;
+ALTER TABLE `users` DROP INDEX IF EXISTS `IDX_users_email`;
+ALTER TABLE `users` DROP INDEX IF EXISTS `IDX_users_status`;
+ALTER TABLE `users` DROP INDEX IF EXISTS `IDX_users_username`;

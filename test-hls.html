@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS 播放测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #fff;
+        }
+        h1 { margin-bottom: 20px; color: #00d4ff; }
+        .container { max-width: 900px; width: 100%; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #16213e;
+            color: #fff;
+            font-size: 14px;
+        }
+        input[type="text"]:focus { outline: none; border-color: #00d4ff; }
+        button {
+            padding: 12px 24px;
+            background: #00d4ff;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover { background: #00a8cc; }
+        .video-container {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.2);
+        }
+        video { width: 100%; height: auto; display: block; }
+        .status {
+            margin-top: 20px;
+            padding: 16px;
+            background: #16213e;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .status.error { border-left: 4px solid #ff4757; }
+        .status.success { border-left: 4px solid #2ed573; }
+        .status.loading { border-left: 4px solid #ffa502; }
+        .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .info {
+            margin-top: 20px;
+            padding: 16px;
+            background: #16213e;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #888;
+        }
+        .info h3 { color: #00d4ff; margin-bottom: 10px; }
+        .warning {
+            background: #ff4757;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h1>HLS 流播放测试</h1>
+    <div class="container">
+        <div class="input-group">
+            <input type="text" id="hlsUrl" placeholder="输入 HLS URL..." value="">
+            <button onclick="playHls(false)">播放</button>
+            <button onclick="playHls(true)" style="background: #e67e22;">纯视频</button>
+        </div>
+        <div class="video-container">
+            <video id="video" controls autoplay muted playsinline></video>
+        </div>
+        <div class="controls">
+            <button onclick="stopHls()">停止</button>
+            <button onclick="reloadHls()">重新加载</button>
+            <button onclick="diagnoseStream()" style="background: #9b59b6;">诊断流</button>
+        </div>
+        <div id="stats" style="margin-top: 15px; padding: 12px; background: #16213e; border-radius: 8px; display: none;">
+            <span id="statsText" style="color: #2ed573;">● 播放中</span>
+            <span id="bufferInfo" style="margin-left: 20px; color: #888;"></span>
+        </div>
+        <div id="status" class="status">等待播放...</div>
+        <div class="info">
+            <h3>使用说明</h3>
+            <p>1. 输入 HLS (.m3u8) 地址</p>
+            <p>2. 点击"播放"按钮（含音频）或"纯视频"按钮（跳过音频）</p>
+            <p>3. 如果遇到音频解码错误，请使用"纯视频"模式</p>
+            <p style="margin-top: 10px; color: #ffa502;">提示: KVS 直播流的音频时间戳可能不连续，导致解码失败</p>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('video');
+        const statusEl = document.getElementById('status');
+        const statsEl = document.getElementById('stats');
+        const statsText = document.getElementById('statsText');
+        const bufferInfo = document.getElementById('bufferInfo');
+        const urlInput = document.getElementById('hlsUrl');
+        let hls = null;
+        let statsInterval = null;
+
+        // 默认URL
+        const defaultUrl = 'https://b-7660be6b.kinesisvideo.cn-north-1.amazonaws.com.cn/hls/v1/getHLSMasterPlaylist.m3u8?SessionToken=CiA_PICUSd3BZZdkRGnNtsFUGzma08fBX-cn1ShkI4888xIQQlacBg2daGN11pt6AtWmPRoZ_VbhK5JVTwbC-d-QIrmH7AFdOiHFg2yUfCIgQYdF-7LQS8PmVrPN7kovWqHd3XsOi1VSEimb1MekxSk~';
+
+        urlInput.value = defaultUrl;
+
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            statusEl.innerHTML += `<div>[${time}] ${message}</div>`;
+            statusEl.scrollTop = statusEl.scrollHeight;
+            statusEl.className = 'status ' + type;
+        }
+
+        function clearLog() {
+            statusEl.innerHTML = '';
+        }
+
+        // 统一的播放函数
+        // videoOnly: true = 纯视频模式（跳过音频解码）
+        function playHls(videoOnly = false) {
+            const url = urlInput.value.trim();
+            if (!url) {
+                log('请输入 HLS URL', 'error');
+                return;
+            }
+
+            clearLog();
+            if (videoOnly) {
+                log('正在加载（纯视频模式，跳过音频解码）...', 'loading');
+            } else {
+                log('正在加载: ' + url.substring(0, 80) + '...', 'loading');
+            }
+
+            // 清理之前的实例
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            // 如果视频元素有错误，重建它
+            if (video.error) {
+                log('检测到视频元素错误，重建视频元素...', 'loading');
+                recreateVideoElement();
+            }
+
+            if (!Hls.isSupported()) {
+                if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    log('使用原生 HLS 支持 (Safari)', 'success');
+                    video.src = url;
+                    video.addEventListener('loadedmetadata', function() {
+                        video.play();
+                    });
+                } else {
+                    log('浏览器不支持 HLS 播放', 'error');
+                }
+                return;
+            }
+
+            const config = {
+                debug: true,
+                enableWorker: false,
+                lowLatencyMode: false,
+                maxBufferLength: 10,
+                maxMaxBufferLength: 30,
+                maxBufferSize: 30 * 1000 * 1000,
+                maxBufferHole: 2.0,
+                liveDurationInfinity: true,
+                liveBackBufferLength: 0,
+                backBufferLength: 0,
+                fragLoadingTimeOut: 30000,
+                fragLoadingMaxRetry: 5,
+                forceKeyFrameOnDiscontinuity: true,
+                startLevel: -1,
+                capLevelToPlayerSize: false,
+                stretchShortVideoTrack: true,
+                ignoreSegmentOffset: true,
+                preferManagedMediaSource: false,
+            };
+
+            hls = new Hls(config);
+            hls.loadSource(url);
+            hls.attachMedia(video);
+
+            // 事件处理
+            hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                log('播放列表解析成功!', 'success');
+                log(`找到 ${data.levels.length} 个画质级别`);
+
+                data.levels.forEach((level, i) => {
+                    log(`级别 ${i}: ${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps`);
+                    log(`  视频: ${level.videoCodec || '未知'}, 音频: ${level.audioCodec || '无'}`);
+                });
+
+                if (videoOnly) {
+                    log('纯视频模式: 静音播放', 'info');
+                    video.muted = true;
+                }
+
+                video.play().catch(e => {
+                    log('自动播放被阻止，请手动点击播放', 'error');
+                });
+                startStatsMonitor();
+            });
+
+            hls.on(Hls.Events.MANIFEST_LOADING, function() {
+                log('正在加载播放列表...', 'loading');
+            });
+
+            let fragCount = 0;
+            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                fragCount++;
+                if (fragCount % 10 === 0) {
+                    log(`已加载 ${fragCount} 个片段`);
+                }
+            });
+
+            // 错误处理
+            let mediaErrorCount = 0;
+            let lastErrorTime = 0;
+            const MAX_MEDIA_ERRORS = 2;
+
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                console.error('[HLS Error]', {
+                    type: data.type,
+                    details: data.details,
+                    fatal: data.fatal,
+                    error: data.error?.message
+                });
+
+                // 检查视频元素错误
+                if (video.error) {
+                    const errorMsg = video.error.message || `错误码: ${video.error.code}`;
+                    log(`视频元素错误: ${errorMsg}`, 'error');
+
+                    // 检测音频相关错误
+                    if (errorMsg.toLowerCase().includes('audio')) {
+                        log('>>> 检测到音频解码错误！请使用"纯视频"按钮 <<<', 'error');
+                    }
+
+                    // 重建并使用纯视频模式重试
+                    log('3秒后自动使用纯视频模式重试...', 'loading');
+                    const savedUrl = urlInput.value;
+
+                    setTimeout(() => {
+                        if (hls) {
+                            hls.destroy();
+                            hls = null;
+                        }
+                        recreateVideoElement();
+                        urlInput.value = savedUrl;
+                        playHls(true); // 强制纯视频模式
+                    }, 3000);
+                    return;
+                }
+
+                if (!data.fatal) return;
+
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        log('网络错误: ' + data.details, 'error');
+                        log('尝试恢复...', 'loading');
+                        hls.startLoad();
+                        break;
+
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        const now = Date.now();
+                        if (now - lastErrorTime > 1000) {
+                            mediaErrorCount++;
+                            lastErrorTime = now;
+                        }
+
+                        log(`媒体错误 #${mediaErrorCount}: ${data.details}`, 'error');
+                        if (data.error?.message) {
+                            log(`原因: ${data.error.message}`, 'error');
+                        }
+
+                        if (mediaErrorCount <= MAX_MEDIA_ERRORS) {
+                            log('尝试恢复...', 'loading');
+                            setTimeout(() => {
+                                if (hls && !video.error) {
+                                    hls.recoverMediaError();
+                                }
+                            }, 300);
+                        }
+                        break;
+
+                    default:
+                        log('致命错误: ' + data.details, 'error');
+                        hls.destroy();
+                        break;
+                }
+            });
+
+            hls.on(Hls.Events.LEVEL_SWITCHED, function(event, data) {
+                const level = hls.levels[data.level];
+                if (level) {
+                    log(`切换到画质: ${level.width}x${level.height} @ ${Math.round(level.bitrate/1000)}kbps`);
+                }
+            });
+        }
+
+        function recreateVideoElement() {
+            const container = video.parentNode;
+            const newVideo = document.createElement('video');
+            newVideo.id = 'video';
+            newVideo.controls = true;
+            newVideo.autoplay = true;
+            newVideo.muted = true;
+            newVideo.playsInline = true;
+            container.replaceChild(newVideo, video);
+            video = newVideo;
+        }
+
+        function stopHls() {
+            stopStatsMonitor();
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            video.src = '';
+            video.load();
+            statsEl.style.display = 'none';
+            log('已停止播放', 'info');
+        }
+
+        function reloadHls() {
+            stopHls();
+            setTimeout(() => playHls(false), 500);
+        }
+
+        function startStatsMonitor() {
+            statsEl.style.display = 'block';
+            statsInterval = setInterval(updateStats, 1000);
+        }
+
+        function stopStatsMonitor() {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
+        }
+
+        function updateStats() {
+            if (!video || !hls) return;
+
+            const buffered = video.buffered;
+            const currentTime = video.currentTime;
+            let bufferEnd = 0;
+
+            if (buffered.length > 0) {
+                bufferEnd = buffered.end(buffered.length - 1);
+            }
+
+            const bufferHealth = bufferEnd - currentTime;
+
+            if (video.paused) {
+                statsText.innerHTML = '⏸ 暂停';
+                statsText.style.color = '#ffa502';
+            } else if (video.ended) {
+                statsText.innerHTML = '⏹ 结束';
+                statsText.style.color = '#ff4757';
+            } else if (bufferHealth < 0.5) {
+                statsText.innerHTML = '⏳ 缓冲中...';
+                statsText.style.color = '#ffa502';
+            } else {
+                statsText.innerHTML = '● 播放中';
+                statsText.style.color = '#2ed573';
+            }
+
+            bufferInfo.innerHTML = `缓冲: ${bufferHealth.toFixed(1)}s | 播放时间: ${currentTime.toFixed(1)}s`;
+        }
+
+        async function diagnoseStream() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                log('请输入 HLS URL', 'error');
+                return;
+            }
+
+            clearLog();
+            log('=== 流诊断开始 ===', 'loading');
+
+            try {
+                log('获取主播放列表...');
+                const masterResponse = await fetch(url);
+                if (!masterResponse.ok) {
+                    log(`HTTP错误: ${masterResponse.status}`, 'error');
+                    return;
+                }
+                const masterContent = await masterResponse.text();
+                log('主播放列表内容:', 'success');
+                log(`<pre style="white-space: pre-wrap; font-size: 11px; max-height: 100px; overflow-y: auto;">${masterContent.substring(0, 600)}</pre>`);
+
+                const lines = masterContent.split('\n');
+                let mediaPlaylistUrl = null;
+
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('#EXT-X-STREAM-INF')) {
+                        mediaPlaylistUrl = lines[i + 1]?.trim();
+                        break;
+                    }
+                }
+
+                if (!mediaPlaylistUrl) {
+                    log('这是直接的媒体播放列表', 'info');
+                    analyzeMediaPlaylist(masterContent);
+                    return;
+                }
+
+                log(`获取媒体播放列表...`);
+                const fullUrl = new URL(mediaPlaylistUrl, url).href;
+                const mediaResponse = await fetch(fullUrl);
+                if (!mediaResponse.ok) {
+                    log(`媒体列表HTTP错误: ${mediaResponse.status}`, 'error');
+                    return;
+                }
+                const mediaContent = await mediaResponse.text();
+                analyzeMediaPlaylist(mediaContent);
+
+            } catch (error) {
+                log(`诊断失败: ${error.message}`, 'error');
+                console.error('Diagnosis error:', error);
+            }
+        }
+
+        function analyzeMediaPlaylist(content) {
+            log('=== 媒体播放列表分析 ===', 'success');
+
+            const lines = content.split('\n');
+            let targetDuration = 0;
+            let segmentCount = 0;
+            let hasMap = false;
+            let codecs = '';
+            let discontinuityCount = 0;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                if (line.startsWith('#EXT-X-TARGETDURATION:')) {
+                    targetDuration = parseInt(line.split(':')[1]);
+                    log(`目标片段时长: ${targetDuration}秒`);
+                }
+                if (line.startsWith('#EXTINF:')) {
+                    segmentCount++;
+                }
+                if (line.startsWith('#EXT-X-DISCONTINUITY')) {
+                    discontinuityCount++;
+                }
+                if (line.startsWith('#EXT-X-MAP')) {
+                    hasMap = true;
+                    const codecMatch = line.match(/CODECS="([^"]+)"/);
+                    if (codecMatch) {
+                        codecs = codecMatch[1];
+                    }
+                }
+                // 从 STREAM-INF 获取编解码器
+                if (line.startsWith('#EXT-X-STREAM-INF')) {
+                    const codecMatch = line.match(/CODECS="([^"]+)"/);
+                    if (codecMatch) {
+                        codecs = codecMatch[1];
+                    }
+                }
+            }
+
+            log(`片段数量: ${segmentCount}`);
+            log(`不连续标记: ${discontinuityCount} 个`);
+
+            if (hasMap) {
+                log('容器格式: fMP4 (可能存在兼容性问题)', 'error');
+            } else {
+                log('容器格式: MPEG-TS (兼容性好)', 'success');
+            }
+
+            if (codecs) {
+                log(`编解码器: ${codecs}`);
+
+                const codecList = codecs.toLowerCase();
+
+                if (codecList.includes('hvc1') || codecList.includes('hev1')) {
+                    log('>>> 警告: H.265/HEVC 编码 - 浏览器兼容性差! <<<', 'error');
+                }
+                if (codecList.includes('avc1')) {
+                    log('视频编码: H.264 (兼容性好)', 'success');
+                }
+                if (codecList.includes('mp4a') || codecList.includes('aac')) {
+                    log('音频编码: AAC (兼容性好)', 'success');
+                }
+                if (codecList.includes('opus') || codecList.includes('vorbis')) {
+                    log('音频编码: Opus/Vorbis (可能有兼容性问题)', 'info');
+                }
+            }
+
+            // 检查时间戳问题
+            if (discontinuityCount > 5) {
+                log(`>>> 检测到 ${discontinuityCount} 个不连续点，时间戳跳跃频繁 <<<`, 'error');
+                log('建议: 这可能导致音频解码失败，请使用"纯视频"模式', 'info');
+            }
+
+            log('=== 诊断完成 ===', 'success');
+        }
+
+        // 页面加载
+        window.addEventListener('load', function() {
+            log('HLS.js 版本: ' + Hls.version);
+            log('HLS 支持: ' + (Hls.isSupported() ? '是' : '否'));
+            log('原生 HLS: ' + (video.canPlayType('application/vnd.apple.mpegurl') ? '是' : '否'));
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "name": "@baby-monitor/admin-service",
+  "version": "1.0.0",
+  "description": "Admin Service for Smart Home IoT Platform - Domain Management",
+  "main": "dist/configuration.js",
+  "scripts": {
+    "dev": "midway-bin dev --port=6009",
+    "build": "midway-bin build",
+    "test": "midway-bin test --ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@baby-monitor/shared-types": "file:../../common/shared-types",
+    "@baby-monitor/shared-utils": "file:../../common/shared-utils",
+    "@midwayjs/bootstrap": "^3.0.0",
+    "@midwayjs/core": "^3.0.0",
+    "@midwayjs/koa": "^3.0.0",
+    "@midwayjs/logger": "^3.0.0",
+    "@midwayjs/redis": "^3.0.0",
+    "@midwayjs/swagger": "^3.0.0",
+    "@midwayjs/typeorm": "^3.0.0",
+    "@midwayjs/validate": "^3.0.0",
+    "@types/pidusage": "^2.0.5",
+    "csv-writer": "^1.6.0",
+    "fast-csv": "^4.3.6",
+    "mysql2": "^3.6.0",
+    "node-cron": "^3.0.3",
+    "pidusage": "^4.0.1",
+    "xlsx": "^0.18.5",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@midwayjs/cli": "^2.0.0",
+    "@midwayjs/mock": "^3.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.19.32",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.0.0"
+  }
+}
